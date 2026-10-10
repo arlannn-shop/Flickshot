@@ -64,7 +64,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:28px 0}
   <nav id="tabs" role="tablist"></nav>
 </header>
 <main id="view"></main>
-<footer class="foot"><span>© Flickshot</span><button class="lnk" data-t="Affiliates">Affiliate program</button><button class="lnk" data-t="Careers">Careers</button></footer>
+<footer class="foot"><span>© Flickshot</span><button class="lnk" data-t="Affiliates">Affiliate program</button><button class="lnk" data-t="Careers">Careers</button><a class="lnk" href="mailto:flickshotshop@gmail.com">flickshotshop@gmail.com</a></footer>
 
 <script>
 /* ============ EDIT YOUR PRODUCTS HERE ============
@@ -143,6 +143,8 @@ const PRODUCTS = {
 const WEB3FORMS_KEY = "941eec4a-d817-4658-baf6-62aead08acd2";
 // Customer confirmation emails (EmailJS). Paste your three IDs from emailjs.com here.
 const EMAILJS = { serviceId: "PASTE_SERVICE_ID", templateId: "PASTE_TEMPLATE_ID", publicKey: "PASTE_PUBLIC_KEY" };
+// The shop's own email address: shown in the footer and used as the reply-to on confirmation emails.
+const SHOP_EMAIL = "flickshotshop@gmail.com";
 const PROMO = { code: "compalan", discount: 1 }; // 1 = 100% off
 
 const view = document.getElementById("view"), tabs = document.getElementById("tabs");
@@ -305,6 +307,7 @@ function placeOrder(){
         user_id: EMAILJS.publicKey,
         template_params: {
           to_email: v.email,
+          reply_to: SHOP_EMAIL,
           to_name: v.name,
           order_number: orderNo,
           items: cart.map(i => i.name).join(", "),
