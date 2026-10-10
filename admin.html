@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flickshot Admin</title>
+<style>
+:root{--bg:#10131c;--card:#1a1e2b;--line:#2a3042;--text:#eef1f8;--mute:#9aa3ba;--acc:#ff4d8d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;padding:24px}
+.box{max-width:900px;margin:40px auto}
+h1{margin:0 0 16px}h1 span{color:var(--acc)}
+input,button{font:inherit;padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text)}
+button{cursor:pointer}button.go{background:var(--acc);border-color:var(--acc);font-weight:600}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+table{width:100%;border-collapse:collapse;margin-top:16px}
+th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:600}
+.no{font-weight:700;color:var(--acc)}
+.msg{color:var(--acc);min-height:1.5em;margin-top:8px}
+.bar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.wrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>Flick<span>shot</span> admin</h1>
+
+  <section id="login">
+    <label for="code">Access code</label><br><br>
+    <input id="code" type="password" autocomplete="off">
+    <button class="go" id="enter">Enter</button>
+    <div class="msg" id="msg" role="status"></div>
+  </section>
+
+  <section id="panel" hidden>
+    <div class="bar">
+      <strong id="count"></strong>
+      <span><button id="refresh">Refresh</button> <button id="clear">Clear all orders</button> <button id="lock">Lock</button></span>
+    </div>
+    <div class="wrap"><table>
+      <thead><tr><th>Order number</th><th>Date</th><th>Items</th><th>Customer</th><th>Total</th><th>Promo</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </section>
+</div>
+
+<script>
+const ACCESS_CODE = "flickadmin26"; // change this to your own secret code
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function load(){
+  let orders = [];
+  try { orders = JSON.parse(localStorage.getItem("flickshot_orders") || "[]"); } catch(e) {}
+  $("count").textContent = orders.length + " order" + (orders.length === 1 ? "" : "s");
+  $("rows").innerHTML = orders.length
+    ? orders.slice().reverse().map(o => `<tr><td class="no">${esc(o.orderNo)}</td><td>${esc(o.date)}</td><td>${o.items.map(esc).join("<br>")}</td><td>${esc(o.name||"-")}<br>${esc(o.email||"")}<br>${esc(o.address||"")}<br>Card ${esc(o.card||"-")}</td><td>£${Number(o.total).toFixed(2)}</td><td>${esc(o.code || "-")}</td></tr>`).join("")
+    : `<tr><td colspan="6">No orders yet.</td></tr>`;
+}
+$("enter").onclick = () => {
+  if ($("code").value === ACCESS_CODE) {
+    $("login").hidden = true; $("panel").hidden = false; $("code").value = ""; load();
+  } else { $("msg").textContent = "Wrong code."; }
+};
+$("code").addEventListener("keydown", e => { if (e.key === "Enter") $("enter").click(); });
+$("refresh").onclick = load;
+$("lock").onclick = () => { $("panel").hidden = true; $("login").hidden = false; $("msg").textContent = ""; };
+$("clear").onclick = () => { if (confirm("Delete all orders?")) { try { localStorage.removeItem("flickshot_orders"); } catch(e) {} load(); } };
+</script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flickshot | Esports Gear</title>
+<style>
+:root{--bg:#10131c;--card:#1a1e2b;--line:#2a3042;--text:#eef1f8;--mute:#9aa3ba;--acc:#ff4d8d;--ok:#4ade80}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;line-height:1.5}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5;flex-wrap:wrap;gap:12px}
+h1{margin:0;font-size:1.5rem;font-weight:800;letter-spacing:-.5px}
+h1 span{color:var(--acc)}
+nav{display:flex;gap:6px;flex-wrap:wrap}
+nav button,.btn{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 16px;border-radius:8px}
+nav button[aria-selected=true]{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+nav button:hover,.btn:hover{border-color:var(--acc)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+main{max-width:1100px;margin:0 auto;padding:24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.card img{width:100%;aspect-ratio:4/3;object-fit:contain;background:#fff;display:block}
+.card div{padding:14px;display:flex;flex-direction:column;gap:6px;flex:1}
+.card h3{margin:0;font-size:1rem}
+.price{color:var(--mute)}
+.card .btn{margin-top:auto;background:var(--acc);border-color:var(--acc);font-weight:600}
+.cart{max-width:640px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.row button{background:none;border:0;color:var(--acc);cursor:pointer;font:inherit}
+.promo{display:flex;gap:8px;margin:20px 0 8px}
+.promo input{flex:1;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);font:inherit}
+.msg{min-height:1.5em;font-size:.9rem}
+.total{font-size:1.3rem;font-weight:700;display:flex;justify-content:space-between;margin:16px 0}
+.ok{color:var(--ok)}.bad{color:var(--acc)}
+.badge{background:var(--acc);border-radius:99px;padding:0 8px;font-size:.8rem;margin-left:4px}
+@media(prefers-reduced-motion:no-preference){.card{transition:transform .15s}.card:hover{transform:translateY(-3px)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Flick<span>shot</span></h1>
+  <nav id="tabs" role="tablist"></nav>
+</header>
+<main id="view"></main>
+
+<script>
+/* ============ EDIT YOUR PRODUCTS HERE ============
+   Put your product photos in an "images" folder next to this file.
+   Each product's "img" is the filename it looks for. If the file is missing,
+   a placeholder is shown. You can also paste a full https:// link instead. */
+const PRODUCTS = {
+  Mice: [
+    ["Logitech G Pro X Superlight 2", 149, "logitech-g-pro-x-superlight-2.jpg"],
+    ["Razer Viper V3 Pro", 159, "razer-viper-v3-pro.jpg"],
+    ["BenQ Zowie EC2-DW", 129, "benq-zowie-ec2-dw.jpg"],
+    ["Endgame Gear OP1 8K", 99, "endgame-gear-op1-8k.jpg"],
+    ["Razer DeathAdder V3 Pro", 149, "razer-deathadder-v3-pro.jpg"]
+  ],
+  Keyboards: [
+    ["Wooting 80HE", 199, "wooting-80he.jpg"],
+    ["Razer Huntsman V3 Pro TKL", 219, "razer-huntsman-v3-pro-tkl.jpg"],
+    ["SteelSeries Apex Pro TKL Gen 3", 229, "steelseries-apex-pro-tkl-gen-3.jpg"],
+    ["Wooting 60HE v2", 175, "wooting-60he-v2.jpg"],
+    ["Corsair K70 Pro TKL", 169, "corsair-k70-pro-tkl.jpg"]
+  ],
+  Mousepads: [
+    ["Artisan Zero", 65, "artisan-zero.jpg"],
+    ["Logitech G640", 30, "logitech-g640.jpg"],
+    ["ZOWIE G-SR-SE Rouge", 55, "zowie-g-sr-se-rouge.jpg"],
+    ["LGG Saturn Pro", 45, "lgg-saturn-pro.jpg"],
+    ["Artisan Hayate Otsu", 70, "artisan-hayate-otsu.jpg"],
+    ["Peek Epilogue For Two", 40, "peek-epilogue-for-two.jpg"]
+  ],
+  Monitors: [
+    ["ASUS ROG Swift OLED PG27AQDP", 899, "asus-rog-swift-oled-pg27aqdp.jpg"],
+    ["BenQ ZOWIE XL2566X+", 549, "benq-zowie-xl2566x-plus.jpg"],
+    ["Alienware AW2725DF", 599, "alienware-aw2725df.jpg"],
+    ["Samsung Odyssey OLED G6", 699, "samsung-odyssey-oled-g6.jpg"],
+    ["ASUS ROG Swift Pro PG248QP", 749, "asus-rog-swift-pro-pg248qp.jpg"]
+  ]
+};
+const PROMO = { code: "compalan", discount: 1 }; // 1 = 100% off
+
+const view = document.getElementById("view"), tabs = document.getElementById("tabs");
+const cart = []; let applied = false, current = "Mice";
+const money = n => "£" + n.toFixed(2);
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function placeholder(name, cat){
+  let h=0; for(const ch of name) h=(h*31+ch.charCodeAt(0))%360;
+  const c=`hsl(${h},70%,52%)`, d=`hsl(${h},60%,22%)`;
+  let art="";
+  if(cat==="Mice"){
+    art=`<path d="M200 50C252 50 272 92 270 160C268 220 242 245 200 245C158 245 132 220 130 160C128 92 148 50 200 50Z" fill="${c}"/>
+    <path d="M130 135H270M200 50V135" stroke="${d}" stroke-width="3" fill="none"/><rect x="190" y="75" width="20" height="38" rx="10" fill="${d}"/>`;
+  } else if(cat==="Keyboards"){
+    art=`<rect x="40" y="75" width="320" height="150" rx="14" fill="${d}"/>`;
+    for(let r=0;r<4;r++)for(let k=0;k<12;k++)art+=`<rect x="${52+k*25.5}" y="${88+r*28}" width="22" height="22" rx="4" fill="${r===0?c:"#e8ebf2"}"/>`;
+    art+=`<rect x="100" y="200" width="200" height="14" rx="4" fill="#e8ebf2"/>`;
+  } else if(cat==="Mousepads"){
+    art=`<rect x="30" y="55" width="340" height="190" rx="18" fill="${c}"/><rect x="42" y="67" width="316" height="166" rx="12" fill="none" stroke="${d}" stroke-width="2" stroke-dasharray="8 6"/>
+    <circle cx="200" cy="150" r="26" fill="${d}"/><circle cx="200" cy="150" r="10" fill="${c}"/>`;
+  } else {
+    art=`<rect x="45" y="35" width="310" height="185" rx="10" fill="#1b1b22"/><rect x="53" y="43" width="294" height="169" rx="4" fill="url(#g)"/>
+    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="${d}"/></linearGradient></defs>
+    <rect x="185" y="220" width="30" height="28" fill="#33333d"/><rect x="135" y="246" width="130" height="10" rx="5" fill="#33333d"/>`;
+  }
+  const label=name.replace(/&/g,"&amp;");
+  return "data:image/svg+xml,"+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect width="400" height="300" fill="#eef0f6"/>${art}<text x="200" y="285" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="600" fill="#333">${label}</text></svg>`);
+}
+
+function renderTabs(){
+  tabs.innerHTML = [...Object.keys(PRODUCTS), "Cart"].map(t =>
+    `<button role="tab" aria-selected="${t===current}" data-t="${t}">${t}${t==="Cart"?`<span class="badge">${cart.length}</span>`:""}</button>`).join("");
+}
+function show(t){ current = t; renderTabs(); t==="Cart" ? renderCart() : renderShop(t); window.scrollTo(0,0); }
+
+function renderShop(cat){
+  view.innerHTML = `<div class="grid">` + PRODUCTS[cat].map(([n,p,img],i) => {
+    const src = img.startsWith("http") ? img : "images/" + img;
+    return `<article class="card"><img src="${esc(src)}" alt="${esc(n)}" loading="lazy" onerror="this.onerror=null;this.src=placeholder(this.alt,'${cat}')">
+    <div><h3>${esc(n)}</h3><span class="price">${money(p)}</span><button class="btn" data-add="${cat}|${i}">Add to cart</button></div></article>`;
+  }).join("") + `</div>`;
+}
+
+function totals(){
+  const sub = cart.reduce((s,i)=>s+i.price,0);
+  const off = applied ? sub*PROMO.discount : 0;
+  return {sub, off, total: sub-off};
+}
+function renderCart(msg="", cls=""){
+  const {sub,off,total} = totals();
+  view.innerHTML = `<section class="cart"><h2>Your cart</h2>` +
+    (cart.length ? cart.map((it,i)=>`<div class="row"><span>${esc(it.name)}</span><span>${money(it.price)} <button data-rm="${i}">Remove</button></span></div>`).join("")
+      : `<p class="price">Your cart is empty. Pick something from a tab above.</p>`) +
+    `<div class="promo"><input id="code" placeholder="Promo code" aria-label="Promo code" value="${applied?PROMO.code:""}"><button class="btn" id="apply">Apply</button></div>
+     <div class="msg ${cls}" role="status">${msg}</div>
+     <div class="row"><span>Subtotal</span><span>${money(sub)}</span></div>
+     ${applied?`<div class="row"><span>Discount (${PROMO.code})</span><span class="ok">-${money(off)}</span></div>`:""}
+     <div class="total"><span>Total</span><span>${money(total)}</span></div>
+     <button class="btn" id="checkout" style="background:var(--acc);border-color:var(--acc);width:100%;font-weight:700"${cart.length?"":" disabled"}>Place order</button></section>`;
+}
+
+
+const luhn = n => { let sum=0, alt=false; for(let i=n.length-1;i>=0;i--){ let d=+n[i]; if(alt){d*=2; if(d>9)d-=9;} sum+=d; alt=!alt; } return sum%10===0; };
+const FIELDS = [
+  ["name","Full name","text","name"],["email","Email","email","email"],
+  ["addr","Street address","text","address-line1"],["city","Town / city","text","address-level2"],["post","Postcode","text","postal-code"],
+  ["cname","Name on card","text","cc-name"],["cnum","Card number","text","cc-number"],["exp","Expiry (MM/YY)","text","cc-exp"],["cvv","CVV","password","cc-csc"]
+];
+function renderCheckout(errs={}, vals={}){
+  const {total} = totals();
+  view.innerHTML = `<section class="cart"><h2>Checkout</h2>
+  <p class="price">Demo shop only. Do not enter real card details. Test card: 4242 4242 4242 4242, any future expiry, any 3 digits.</p>
+  <h3>Delivery address</h3>${FIELDS.slice(0,5).map(f=>fld(f,errs,vals)).join("")}
+  <h3>Payment</h3>${FIELDS.slice(5).map(f=>fld(f,errs,vals)).join("")}
+  <div class="total"><span>Total</span><span>${money(total)}</span></div>
+  <button class="btn" id="pay" style="background:var(--acc);border-color:var(--acc);width:100%;font-weight:700">Pay ${money(total)}</button>
+  <p><button class="btn" id="back">Back to cart</button></p></section>`;
+}
+function fld([id,label,type,ac],errs,vals){
+  return `<div style="margin:10px 0"><label for="f_${id}">${label}</label><br><input id="f_${id}" type="${type}" autocomplete="${ac}" value="${esc(vals[id]||"")}" style="width:100%;padding:10px;border-radius:8px;border:1px solid ${errs[id]?"var(--acc)":"var(--line)"};background:var(--card);color:var(--text);font:inherit"><div class="bad" style="font-size:.85rem">${errs[id]||""}</div></div>`;
+}
+function placeOrder(){
+  const v = {}; FIELDS.forEach(f => v[f[0]] = document.getElementById("f_"+f[0]).value.trim());
+  const e = {}, digits = v.cnum.replace(/\s|-/g,"");
+  if (v.name.length<2) e.name="Enter your full name.";
+  if (!/^\S+@\S+\.\S+$/.test(v.email)) e.email="Enter a valid email address.";
+  if (v.addr.length<5) e.addr="Enter your street address.";
+  if (v.city.length<2) e.city="Enter your town or city.";
+  if (!/^[A-Za-z]{1,2}\d[A-Za-z\d]?\s*\d[A-Za-z]{2}$/.test(v.post)) e.post="Enter a valid UK postcode.";
+  if (v.cname.length<2) e.cname="Enter the name on the card.";
+  if (!/^\d{13,19}$/.test(digits) || !luhn(digits)) e.cnum="Enter a valid card number.";
+  const m = v.exp.match(/^(\d{2})\s*\/\s*(\d{2})$/);
+  const now = new Date();
+  if (!m || +m[1]<1 || +m[1]>12 || (2000+ +m[2])*12 + +m[1] < now.getFullYear()*12 + now.getMonth()+1) e.exp="Enter a future date as MM/YY.";
+  if (!/^\d{3,4}$/.test(v.cvv)) e.cvv="Enter the 3 or 4 digit code.";
+  if (Object.keys(e).length) return renderCheckout(e, v);
+  const {total} = totals();
+  let orderNo = "ORDER-0";
+  try {
+    const orders = JSON.parse(localStorage.getItem("flickshot_orders") || "[]");
+    orderNo = "ORDER-" + orders.length;
+    // The full card number and CVV are never saved, only the last 4 digits.
+    orders.push({orderNo, date: new Date().toLocaleString("en-GB"), items: cart.map(i=>i.name), total, code: applied ? PROMO.code : "",
+      name: v.name, email: v.email, address: v.addr + ", " + v.city + ", " + v.post.toUpperCase(), card: "•••• " + digits.slice(-4)});
+    localStorage.setItem("flickshot_orders", JSON.stringify(orders));
+  } catch(err) { console.error("Could not save order", err); }
+  view.innerHTML = `<section class="cart"><h2>Order placed</h2><p>Thanks, ${esc(v.name)}! Your order number is <strong class="ok" style="font-size:1.4rem">${orderNo}</strong></p><p>${cart.length} item(s), total paid: <strong>${money(total)}</strong>.<br>Delivering to ${esc(v.addr)}, ${esc(v.city)}, ${esc(v.post.toUpperCase())}.</p></section>`;
+  cart.length = 0; applied = false; renderTabs();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-t]"); if (t) return show(t.dataset.t);
+  const a = e.target.closest("[data-add]");
+  if (a){ const [c,i] = a.dataset.add.split("|"); const [name,price] = PRODUCTS[c][i]; cart.push({name,price}); renderTabs(); a.textContent="Added ✓"; setTimeout(()=>a.textContent="Add to cart",900); return; }
+  const r = e.target.closest("[data-rm]"); if (r){ cart.splice(+r.dataset.rm,1); renderTabs(); return renderCart(); }
+  if (e.target.id==="apply"){
+    const v = document.getElementById("code").value.trim().toLowerCase();
+    if (v===PROMO.code){ applied = true; renderCart("Code applied: 100% off.","ok"); }
+    else { applied = false; renderCart("That code isn't valid.","bad"); }
+  }
+  if (e.target.id==="checkout") return renderCheckout();
+  if (e.target.id==="back") return renderCart();
+  if (e.target.id==="pay") return placeOrder();
+});
+show("Mice");
+</script>
+</body>
+</html>
