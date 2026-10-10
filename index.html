@@ -317,7 +317,7 @@ function placeOrder(){
       })
     }).catch(err => console.error("Could not send confirmation email", err));
   }
-  view.innerHTML = `<section class="cart"><h2>Order placed</h2><p>Thanks, ${esc(v.name)}! Your order number is <strong class="ok" style="font-size:1.4rem">${orderNo}</strong></p><p>${cart.length} item(s), total paid: <strong>${money(total)}</strong>.<br>Delivering to ${esc(v.addr)}, ${esc(v.city)}, ${esc(v.post.toUpperCase())}.</p></section>`;
+  view.innerHTML = `<section class="cart"><h2>Order placed</h2><p>Thanks, ${esc(v.name)}! Your order number is <strong class="ok" style="font-size:1.4rem">${orderNo}</strong></p><p>${cart.length} item(s), order total: <strong>${money(total)}</strong>.<br>Delivering to ${esc(v.addr)}, ${esc(v.city)}, ${esc(v.post.toUpperCase())}.</p><p style="margin-top:24px;padding:12px 14px;border:1px solid var(--acc);border-radius:10px;background:var(--card)" role="note"><strong>This is not a real shop.</strong> Flickshot is a demo site, so no payment was taken and nothing will be delivered.</p></section>`;
   creditAffiliate(appliedCode, applied, total);
   cart.length = 0; applied = false; rate = 0; appliedCode = ""; renderTabs();
 }
