@@ -3,23 +3,40 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
 <title>Flickshot Admin</title>
 <style>
-:root{--bg:#10131c;--card:#1a1e2b;--line:#2a3042;--text:#eef1f8;--mute:#9aa3ba;--acc:#ff4d8d}
+:root{--bg:#10131c;--card:#1a1e2b;--line:#2a3042;--text:#eef1f8;--mute:#9aa3ba;--acc:#ff4d8d;--ok:#4ade80;--warn:#fbbf24}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;padding:24px}
-.box{max-width:900px;margin:40px auto}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;padding:24px;line-height:1.5}
+.box{max-width:1100px;margin:40px auto}
 h1{margin:0 0 16px}h1 span{color:var(--acc)}
-input,button{font:inherit;padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text)}
-button{cursor:pointer}button.go{background:var(--acc);border-color:var(--acc);font-weight:600}
+input,button,textarea{font:inherit;padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text)}
+button{cursor:pointer}button:hover{border-color:var(--acc)}
+button.go{background:var(--acc);border-color:var(--acc);font-weight:600}
+button.sm{padding:5px 10px;font-size:.9rem}
+button[disabled]{opacity:.5;cursor:default}
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 table{width:100%;border-collapse:collapse;margin-top:16px}
 th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--mute);font-weight:600}
+th{color:var(--mute);font-weight:600;white-space:nowrap}
 .no{font-weight:700;color:var(--acc)}
+.mute{color:var(--mute);font-size:.9rem}
 .msg{color:var(--acc);min-height:1.5em;margin-top:8px}
 .bar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .wrap{overflow-x:auto}
+nav{display:flex;gap:6px}
+nav button[aria-selected=true]{background:var(--acc);border-color:var(--acc);font-weight:600}
+.badge{display:inline-block;border-radius:99px;padding:1px 10px;font-size:.8rem;border:1px solid var(--line)}
+.badge.accepted{color:var(--ok);border-color:var(--ok)}.badge.rejected{color:var(--acc);border-color:var(--acc)}.badge.new{color:var(--warn);border-color:var(--warn)}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+.field{margin:12px 0}.field label{display:block;margin-bottom:4px;font-weight:600}
+.field input{width:100%;max-width:360px}
+dialog{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;width:min(560px,92vw);padding:20px}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+dialog textarea{width:100%;min-height:200px;resize:vertical}
+dialog h2{margin-top:0}
+.note{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:10px 0;color:var(--mute);font-size:.9rem}
 </style>
 </head>
 <body>
@@ -27,46 +44,208 @@ th{color:var(--mute);font-weight:600}
   <h1>Flick<span>shot</span> admin</h1>
 
   <section id="login">
-    <label for="code">Access code</label><br><br>
-    <input id="code" type="password" autocomplete="off">
-    <button class="go" id="enter">Enter</button>
-    <div class="msg" id="msg" role="status"></div>
+    <form id="loginForm">
+      <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" required></div>
+      <button class="go" id="enter" type="submit">Sign in</button>
+      <div class="msg" id="msg" role="status"></div>
+    </form>
   </section>
 
   <section id="panel" hidden>
     <div class="bar">
-      <strong id="count"></strong>
-      <span><button id="refresh">Refresh</button> <button id="clear">Clear all orders</button> <button id="lock">Lock</button></span>
+      <nav id="tabs" role="tablist">
+        <button role="tab" data-tab="orders">Orders</button>
+        <button role="tab" data-tab="applications">Applications</button>
+        <button role="tab" data-tab="affiliates">Affiliates</button>
+      </nav>
+      <span><button id="refresh">Refresh</button> <button id="lock">Sign out</button></span>
     </div>
-    <div class="wrap"><table>
-      <thead><tr><th>Order number</th><th>Date</th><th>Items</th><th>Customer</th><th>Total</th><th>Promo</th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table></div>
+    <div id="view"></div>
   </section>
 </div>
 
-<script>
-const ACCESS_CODE = "flickadmin26"; // change this to your own secret code
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+<dialog id="dlg">
+  <h2 id="dlgTitle"></h2>
+  <p class="mute" id="dlgTo"></p>
+  <textarea id="dlgBody" aria-label="Email message"></textarea>
+  <div class="note" id="dlgNote"></div>
+  <div class="msg" id="dlgMsg" role="status"></div>
+  <div class="row" style="margin-top:12px">
+    <button class="go" id="dlgSend">Send email</button>
+    <button id="dlgMailto">Open in my email app</button>
+    <button id="dlgCancel">Cancel</button>
+  </div>
+</dialog>
 
-function load(){
-  let orders = [];
-  try { orders = JSON.parse(localStorage.getItem("flickshot_orders") || "[]"); } catch(e) {}
-  $("count").textContent = orders.length + " order" + (orders.length === 1 ? "" : "s");
-  $("rows").innerHTML = orders.length
-    ? orders.slice().reverse().map(o => `<tr><td class="no">${esc(o.orderNo)}</td><td>${esc(o.date)}</td><td>${o.items.map(esc).join("<br>")}</td><td>${esc(o.name||"-")}<br>${esc(o.email||"")}<br>${esc(o.address||"")}<br>Card ${esc(o.card||"-")}</td><td>£${Number(o.total).toFixed(2)}</td><td>${esc(o.code || "-")}</td></tr>`).join("")
-    : `<tr><td colspan="6">No orders yet.</td></tr>`;
-}
-$("enter").onclick = () => {
-  if ($("code").value === ACCESS_CODE) {
-    $("login").hidden = true; $("panel").hidden = false; $("code").value = ""; load();
-  } else { $("msg").textContent = "Wrong code."; }
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, doc, getDocs, query, orderBy, updateDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD8QK6dMvZ-A8Zq9eL-OcwuAnF2PmCzE8Q",
+  authDomain: "flickshot-c0baf.firebaseapp.com",
+  projectId: "flickshot-c0baf",
+  storageBucket: "flickshot-c0baf.firebasestorage.app",
+  messagingSenderId: "577617551561",
+  appId: "1:577617551561:web:647a0cc39e7132851cad18"
 };
-$("code").addEventListener("keydown", e => { if (e.key === "Enter") $("enter").click(); });
+
+// Accept / reject emails. Make a SECOND EmailJS template (separate from the order confirmation) with these variables:
+//   To email: {{to_email}}   Subject: {{subject}}   Body: {{message}}
+// Until these are filled in, the "Open in my email app" button still works.
+const EMAILJS = { serviceId: "PASTE_SERVICE_ID", templateId: "PASTE_REPLY_TEMPLATE_ID", publicKey: "PASTE_PUBLIC_KEY" };
+const SHOP_EMAIL = "flickshotshop@gmail.com";
+const COMMISSION = 0.05; // keep in step with the shop page
+
+const db = getFirestore(initializeApp(firebaseConfig));
+const auth = getAuth();
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const when = t => t && t.toDate ? t.toDate().toLocaleString("en-GB") : "-";
+const money = n => "£" + Number(n || 0).toFixed(2);
+const emailReady = EMAILJS.serviceId.indexOf("PASTE") === -1 && EMAILJS.templateId.indexOf("PASTE") === -1 && EMAILJS.publicKey.indexOf("PASTE") === -1;
+
+let tab = "orders", cache = { orders: [], applications: [], affiliates: [] }, pending = null;
+
+async function fetchAll(name) {
+  const snap = await getDocs(query(collection(db, name), orderBy("createdAt", "desc")));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function load() {
+  $("view").innerHTML = `<p class="mute">Loading…</p>`;
+  try {
+    [cache.orders, cache.applications, cache.affiliates] = await Promise.all([fetchAll("orders"), fetchAll("applications"), fetchAll("affiliates")]);
+  } catch (err) {
+    console.error(err);
+    $("view").innerHTML = `<p class="msg">${err.code === "permission-denied" || /permission/i.test(err.message) ? "This account doesn't have admin access. Check the User UID in your database rules." : "Couldn't load data: " + esc(err.message)}</p>`;
+    return;
+  }
+  render();
+}
+
+function render() {
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === tab));
+  $("view").innerHTML = tab === "orders" ? ordersHTML() : tab === "applications" ? appsHTML() : affiliatesHTML();
+}
+
+function ordersHTML() {
+  const o = cache.orders;
+  return `<div class="bar" style="margin-top:16px"><strong>${o.length} order${o.length === 1 ? "" : "s"}</strong>${o.length ? `<button id="clearOrders">Delete all orders</button>` : ""}</div>
+  <div class="wrap"><table><thead><tr><th>Order number</th><th>Date</th><th>Customer</th><th>Items</th><th>Total</th><th>Promo</th></tr></thead><tbody>${
+    o.length ? o.map(x => `<tr><td class="no">${esc(x.orderNo)}</td><td>${when(x.createdAt)}</td><td>${esc(x.name)}<br><span class="mute">${esc(x.email)}<br>${esc(x.address)}</span></td><td>${(x.items || []).map(esc).join("<br>")}</td><td>${money(x.total)}</td><td>${esc(x.code || "-")}</td></tr>`).join("") : `<tr><td colspan="6">No orders yet.</td></tr>`}</tbody></table></div>`;
+}
+
+function appsHTML() {
+  const a = cache.applications;
+  return `<div class="bar" style="margin-top:16px"><strong>${a.length} application${a.length === 1 ? "" : "s"}</strong></div>
+  <div class="wrap"><table><thead><tr><th>Date</th><th>Applicant</th><th>Role</th><th>Message</th><th>Status</th><th>Reply</th></tr></thead><tbody>${
+    a.length ? a.map(x => {
+      const st = x.status || "new";
+      const link = /^https?:\/\//.test(x.link || "") ? `<br><a href="${esc(x.link)}" target="_blank" rel="noopener noreferrer" style="color:var(--acc)">CV / portfolio</a>` : "";
+      return `<tr><td>${when(x.createdAt)}</td><td>${esc(x.name)}<br><span class="mute">${esc(x.email)}</span></td><td>${esc(x.role)}</td><td style="max-width:320px;white-space:pre-wrap">${esc(x.msg)}${link}</td>
+      <td><span class="badge ${esc(st)}">${esc(st)}</span></td>
+      <td><div class="row"><button class="sm go" data-act="accept" data-id="${esc(x.id)}">Accept</button><button class="sm" data-act="reject" data-id="${esc(x.id)}">Reject</button></div></td></tr>`;
+    }).join("") : `<tr><td colspan="6">No applications yet.</td></tr>`}</tbody></table></div>`;
+}
+
+function affiliatesHTML() {
+  const a = cache.affiliates;
+  return `<div class="bar" style="margin-top:16px"><strong>${a.length} affiliate${a.length === 1 ? "" : "s"}</strong><span class="mute">Commission ${Math.round(COMMISSION * 100)}% of order totals</span></div>
+  <div class="wrap"><table><thead><tr><th>Code</th><th>Email</th><th>Joined</th><th>Orders</th><th>Sales</th><th>Commission owed</th><th></th></tr></thead><tbody>${
+    a.length ? a.map(x => {
+      const mine = cache.orders.filter(o => String(o.code || "").toUpperCase() === String(x.code).toUpperCase());
+      const sales = mine.reduce((t, o) => t + Number(o.total || 0), 0);
+      return `<tr><td class="no">${esc(x.code)}</td><td>${esc(x.email)}</td><td>${when(x.createdAt)}</td><td>${mine.length}</td><td>${money(sales)}</td><td>${money(sales * COMMISSION)}</td><td><button class="sm" data-rm="${esc(x.id)}">Remove</button></td></tr>`;
+    }).join("") : `<tr><td colspan="7">No affiliates yet.</td></tr>`}</tbody></table></div>`;
+}
+
+// ---- reply dialog ----
+function openReply(id, decision) {
+  const a = cache.applications.find(x => x.id === id); if (!a) return;
+  const first = String(a.name).split(" ")[0];
+  const accept = decision === "accept";
+  const subject = accept ? `Your Flickshot application: good news` : `Your Flickshot application`;
+  const body = accept
+    ? `Hi ${first},\n\nThanks for applying for the ${a.role} role at Flickshot. We'd love to take things further! We'll be in touch shortly with the next steps.\n\nBest wishes,\nThe Flickshot team`
+    : `Hi ${first},\n\nThanks for applying for the ${a.role} role at Flickshot. After looking at all the applications, we've decided not to take yours further this time. We really appreciate your interest and wish you all the best.\n\nBest wishes,\nThe Flickshot team`;
+  pending = { a, decision: accept ? "accepted" : "rejected", subject };
+  $("dlgTitle").textContent = (accept ? "Accept " : "Reject ") + a.name;
+  $("dlgTo").textContent = "To: " + a.email + " · Subject: " + subject;
+  $("dlgBody").value = body; $("dlgMsg").textContent = "";
+  $("dlgSend").hidden = !emailReady;
+  $("dlgNote").textContent = emailReady ? "“Send email” sends this message and marks the application as " + pending.decision + "." : "EmailJS isn't set up for replies yet, so use “Open in my email app” (it opens a ready-written email and marks the application as " + pending.decision + ").";
+  $("dlg").showModal();
+}
+
+async function markDecision() {
+  await updateDoc(doc(db, "applications", pending.a.id), { status: pending.decision, decidedAt: serverTimestamp() });
+  const row = cache.applications.find(x => x.id === pending.a.id); if (row) row.status = pending.decision;
+}
+
+$("dlgCancel").onclick = () => $("dlg").close();
+$("dlgSend").onclick = async () => {
+  $("dlgSend").disabled = true; $("dlgMsg").textContent = "Sending…";
+  try {
+    const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ service_id: EMAILJS.serviceId, template_id: EMAILJS.templateId, user_id: EMAILJS.publicKey,
+        template_params: { to_email: pending.a.email, to_name: pending.a.name, subject: pending.subject, message: $("dlgBody").value, reply_to: SHOP_EMAIL } })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    await markDecision();
+    $("dlg").close(); render();
+  } catch (err) { console.error(err); $("dlgMsg").textContent = "Couldn't send: " + err.message; }
+  $("dlgSend").disabled = false;
+};
+$("dlgMailto").onclick = async () => {
+  const url = "mailto:" + encodeURIComponent(pending.a.email) + "?subject=" + encodeURIComponent(pending.subject) + "&body=" + encodeURIComponent($("dlgBody").value);
+  try { await markDecision(); } catch (err) { console.error(err); }
+  window.location.href = url;
+  $("dlg").close(); render();
+};
+
+// ---- clicks ----
+$("tabs").onclick = e => { const b = e.target.closest("[data-tab]"); if (b) { tab = b.dataset.tab; render(); } };
+$("view").onclick = async e => {
+  const act = e.target.closest("[data-act]"); if (act) return openReply(act.dataset.id, act.dataset.act);
+  const rm = e.target.closest("[data-rm]");
+  if (rm) {
+    const a = cache.affiliates.find(x => x.id === rm.dataset.rm);
+    if (a && confirm("Remove affiliate " + a.code + "? Their code will stop working.")) {
+      const b = writeBatch(db); b.delete(doc(db, "affiliates", a.id)); b.delete(doc(db, "codes", String(a.code).toUpperCase()));
+      try { await b.commit(); await load(); } catch (err) { alert("Couldn't remove: " + err.message); }
+    }
+    return;
+  }
+  if (e.target.id === "clearOrders" && confirm("Delete ALL orders? This can't be undone.")) {
+    try {
+      for (let i = 0; i < cache.orders.length; i += 400) {
+        const b = writeBatch(db); cache.orders.slice(i, i + 400).forEach(o => b.delete(doc(db, "orders", o.id))); await b.commit();
+      }
+      await load();
+    } catch (err) { alert("Couldn't delete: " + err.message); }
+  }
+};
 $("refresh").onclick = load;
-$("lock").onclick = () => { $("panel").hidden = true; $("login").hidden = false; $("msg").textContent = ""; };
-$("clear").onclick = () => { if (confirm("Delete all orders?")) { try { localStorage.removeItem("flickshot_orders"); } catch(e) {} load(); } };
+$("lock").onclick = () => signOut(auth);
+
+// ---- sign in ----
+$("loginForm").onsubmit = async e => {
+  e.preventDefault(); $("msg").textContent = ""; $("enter").disabled = true;
+  try { await signInWithEmailAndPassword(auth, $("email").value.trim(), $("pw").value); $("pw").value = ""; }
+  catch (err) {
+    console.error(err);
+    $("msg").textContent = /invalid-credential|wrong-password|user-not-found|invalid-email/.test(err.code || "") ? "Wrong email or password." : /too-many/.test(err.code || "") ? "Too many tries. Wait a few minutes." : "Couldn't sign in: " + (err.code || err.message);
+  }
+  $("enter").disabled = false;
+};
+onAuthStateChanged(auth, user => {
+  $("login").hidden = !!user; $("panel").hidden = !user;
+  if (user) load(); else $("view").innerHTML = "";
+});
 </script>
 </body>
 </html>

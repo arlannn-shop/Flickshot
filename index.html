@@ -269,15 +269,18 @@ function placeOrder(){
   if (!/^\d{3,4}$/.test(v.cvv)) e.cvv="Enter the 3 or 4 digit code.";
   if (Object.keys(e).length) return renderCheckout(e, v);
   const {total} = totals();
-  let orderNo = "ORDER-0";
+  let orderNo = "ORDER-" + (Math.floor(Math.random()*900000)+100000);
   try {
     const orders = JSON.parse(localStorage.getItem("flickshot_orders") || "[]");
-    orderNo = "ORDER-" + orders.length;
     // The full card number and CVV are never saved, only the last 4 digits.
     orders.push({orderNo, date: new Date().toLocaleString("en-GB"), items: cart.map(i=>i.name), total, code: applied ? appliedCode : "",
       name: v.name, email: v.email, address: v.addr + ", " + v.city + ", " + v.post.toUpperCase(), card: "•••• " + digits.slice(-4)});
     localStorage.setItem("flickshot_orders", JSON.stringify(orders));
   } catch(err) { console.error("Could not save order", err); }
+  // Save the order to the shop database so it shows up in the admin page.
+  if (window.FB) FB.addOrder({orderNo, items: cart.map(i=>i.name), total, code: applied ? appliedCode : "",
+    name: v.name, email: v.email, address: v.addr + ", " + v.city + ", " + v.post.toUpperCase()})
+    .catch(err => console.error("Could not save order to the database", err));
   if (WEB3FORMS_KEY && WEB3FORMS_KEY !== "PASTE_YOUR_KEY_HERE") {
     fetch("https://api.web3forms.com/submit", {
       method: "POST",
@@ -318,7 +321,6 @@ function placeOrder(){
     }).catch(err => console.error("Could not send confirmation email", err));
   }
   view.innerHTML = `<section class="cart"><h2>Order placed</h2><p>Thanks, ${esc(v.name)}! Your order number is <strong class="ok" style="font-size:1.4rem">${orderNo}</strong></p><p>${cart.length} item(s), order total: <strong>${money(total)}</strong>.<br>Delivering to ${esc(v.addr)}, ${esc(v.city)}, ${esc(v.post.toUpperCase())}.</p><p style="margin-top:24px;padding:12px 14px;border:1px solid var(--acc);border-radius:10px;background:var(--card)" role="note"><strong>This is not a real shop.</strong> Flickshot is a demo site, so no payment was taken and nothing will be delivered.</p></section>`;
-  creditAffiliate(appliedCode, applied, total);
   cart.length = 0; applied = false; rate = 0; appliedCode = ""; renderTabs();
 }
 
@@ -331,21 +333,11 @@ const ROLES = [
   ["Gear Tester","Remote / UK","Try new mice, pads and monitors and write honest reviews."],
   ["Warehouse & Packing Assistant","UK","Pick, pack and ship orders accurately and on time."]
 ];
-const lsGet = k => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch(e){ return []; } };
-const lsSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } };
-const getAffiliates = () => lsGet("flickshot_affiliates");
 function sendForm(subject, data){
   if (!WEB3FORMS_KEY || WEB3FORMS_KEY === "PASTE_YOUR_KEY_HERE") return;
   fetch("https://api.web3forms.com/submit", {method:"POST", headers:{"Content-Type":"application/json","Accept":"application/json"},
     body: JSON.stringify(Object.assign({access_key: WEB3FORMS_KEY, subject, from_name: "Flickshot"}, data))
   }).catch(err => console.error("Could not send form", err));
-}
-function creditAffiliate(code, wasApplied, total){
-  if (!wasApplied) return;
-  const list = getAffiliates(), a = list.find(x => x.code === code);
-  if (!a) return;
-  a.uses = (a.uses||0) + 1; a.earned = +((a.earned||0) + total*AFF.commission).toFixed(2);
-  lsSet("flickshot_affiliates", list);
 }
 function grp(id,label,type,val,err,extra=""){
   return `<div class="fgrp"><label for="${id}">${label}</label><input id="${id}" type="${type}" value="${esc(val||"")}" ${extra}${err?` style="border-color:var(--acc)"`:""}><div class="err">${err||""}</div></div>`;
@@ -364,7 +356,6 @@ function renderAffiliates(errs={}, vals={}, done=null){
     <p class="price">Share it anywhere. Anyone who enters it in the cart gets ${Math.round(AFF.customerDiscount*100)}% off, and you earn ${Math.round(AFF.commission*100)}% commission. Signed up as ${esc(done.email)}.</p>
     <button class="btn" id="aff-back">Back to affiliates</button></section>`; return;
   }
-  const stat = vals._stat;
   document.getElementById('affiliates').innerHTML = `<section class="panel"><h2>Affiliate program</h2>
     <p class="price">Earn money by sharing Flickshot with your community. Sign up with your email and choose your own code.</p>${perks}
     <h3>Sign up</h3>
@@ -372,31 +363,28 @@ function renderAffiliates(errs={}, vals={}, done=null){
     ${grp("aff_code","Choose your code","text",vals.code,errs.code,'maxlength="16" autocomplete="off" placeholder="e.g. FLICKKING"')}
     <div class="fgrp" style="margin-top:-8px"><small>4 to 16 letters or numbers. Codes are first come, first served.</small></div>
     <button class="btn" id="aff-join" style="background:var(--acc);border-color:var(--acc);width:100%;font-weight:700">Join the program</button>
-    <hr class="sep"><h3>Already an affiliate?</h3>
-    ${grp("aff_lookup","Enter your email to see your stats","email",vals.lookup,errs.lookup,'autocomplete="email"')}
-    <button class="btn" id="aff-check">View my stats</button>
-    ${stat?`<div class="stats"><div><b>${esc(stat.code)}</b>Your code</div><div><b>${stat.uses||0}</b>Orders</div><div><b>${money(stat.earned||0)}</b>Earned</div></div><p class="price" style="font-size:.85rem">Stats are tracked in this browser.</p>`:""}
+
   </section>`;
 }
-function joinAffiliate(){
+async function joinAffiliate(){
   const email = document.getElementById("aff_email").value.trim().toLowerCase();
   const code = document.getElementById("aff_code").value.trim();
-  const e = {}, list = getAffiliates();
+  const e = {};
   if (!/^\S+@\S+\.\S+$/.test(email)) e.email = "Enter a valid email address.";
-  else if (list.some(a => a.email === email)) e.email = "That email is already signed up.";
   if (!/^[A-Za-z0-9]{4,16}$/.test(code)) e.code = "Use 4 to 16 letters or numbers only.";
-  else if (code.toLowerCase()===PROMO.code || list.some(a => a.code.toLowerCase()===code.toLowerCase())) e.code = "That code is taken. Try another.";
+  else if (code.toLowerCase()===PROMO.code) e.code = "That code is taken. Try another.";
   if (Object.keys(e).length) return renderAffiliates(e, {email, code});
-  const rec = {email, code: code.toUpperCase(), joined: new Date().toLocaleString("en-GB"), uses: 0, earned: 0};
-  list.push(rec); lsSet("flickshot_affiliates", list);
+  if (!window.FB) return renderAffiliates({code:"Couldn't reach the server. Check your connection and try again."}, {email, code});
+  const rec = {email, code: code.toUpperCase()};
+  try {
+    if (await FB.codeExists(rec.code)) return renderAffiliates({code:"That code is taken. Try another."}, {email, code});
+    await FB.joinAffiliate(rec.email, rec.code);
+  } catch(err) {
+    console.error(err);
+    return renderAffiliates({email:"That email may already be signed up, or we couldn't reach the server. Please try again."}, {email, code});
+  }
   sendForm("New Flickshot affiliate: " + rec.code, {affiliate_email: rec.email, affiliate_code: rec.code});
   renderAffiliates({}, {}, rec);
-}
-function checkAffiliate(){
-  const email = document.getElementById("aff_lookup").value.trim().toLowerCase();
-  const a = getAffiliates().find(x => x.email === email);
-  if (!a) return renderAffiliates({lookup:"No affiliate found for that email."}, {lookup: email});
-  renderAffiliates({}, {lookup: email, _stat: a});
 }
 
 function renderCareers(errs={}, vals={}, done=null){
@@ -414,7 +402,7 @@ function renderCareers(errs={}, vals={}, done=null){
     <div class="fgrp"><label for="job_msg">Tell us about yourself</label><textarea id="job_msg">${esc(vals.msg||"")}</textarea><div class="err">${errs.msg||""}</div></div>
     <button class="btn" id="job-submit" style="background:var(--acc);border-color:var(--acc);width:100%;font-weight:700">Submit application</button></section>`;
 }
-function submitJob(){
+async function submitJob(){
   const v = {name:job_name.value.trim(), email:job_email.value.trim(), role:job_role.value, link:job_link.value.trim(), msg:job_msg.value.trim()};
   const e = {};
   if (v.name.length<2) e.name = "Enter your full name.";
@@ -423,9 +411,21 @@ function submitJob(){
   if (v.link && !/^https?:\/\/\S+\.\S+/.test(v.link)) e.link = "Enter a full link starting with https://";
   if (v.msg.length<20) e.msg = "Write at least a couple of sentences.";
   if (Object.keys(e).length) return renderCareers(e, v);
-  const apps = lsGet("flickshot_applications"); apps.push(Object.assign({date:new Date().toLocaleString("en-GB")}, v)); lsSet("flickshot_applications", apps);
+  if (window.FB) {
+    try { await FB.addApplication({name: v.name, email: v.email, role: v.role, link: v.link, msg: v.msg}); }
+    catch(err) { console.error(err); return renderCareers({msg:"We couldn't send your application. Please try again."}, v); }
+  }
   sendForm("New job application: " + v.role, {applicant: v.name, email: v.email, role: v.role, cv_link: v.link || "none", message: v.msg});
   renderCareers({}, {}, v);
+}
+
+async function applyCode(raw){
+  const v = raw.toLowerCase();
+  if (v===PROMO.code){ applied = true; rate = PROMO.discount; appliedCode = PROMO.code; return renderCart("Code applied: 100% off.","ok"); }
+  let found = false;
+  if (/^[A-Za-z0-9]{4,16}$/.test(raw) && window.FB) { try { found = await FB.codeExists(raw.toUpperCase()); } catch(err) { console.error(err); } }
+  if (found){ applied = true; rate = AFF.customerDiscount; appliedCode = raw.toUpperCase(); renderCart("Code applied: "+Math.round(rate*100)+"% off.","ok"); }
+  else { applied = false; rate = 0; appliedCode = ""; renderCart("That code isn't valid.","bad"); }
 }
 
 document.addEventListener("click", e => {
@@ -434,23 +434,41 @@ document.addEventListener("click", e => {
   const a = e.target.closest("[data-add]");
   if (a){ const [c,i] = a.dataset.add.split("|"); const [name,price] = PRODUCTS[c][i]; cart.push({name,price}); renderTabs(); a.textContent="Added ✓"; setTimeout(()=>a.textContent="Add to cart",900); return; }
   const r = e.target.closest("[data-rm]"); if (r){ cart.splice(+r.dataset.rm,1); renderTabs(); return renderCart(); }
-  if (e.target.id==="apply"){
-    const v = document.getElementById("code").value.trim().toLowerCase();
-    const aff = getAffiliates().find(a => a.code.toLowerCase()===v);
-    if (v===PROMO.code){ applied = true; rate = PROMO.discount; appliedCode = PROMO.code; renderCart("Code applied: 100% off.","ok"); }
-    else if (aff){ applied = true; rate = AFF.customerDiscount; appliedCode = aff.code; renderCart("Code applied: "+Math.round(rate*100)+"% off.","ok"); }
-    else { applied = false; rate = 0; appliedCode = ""; renderCart("That code isn't valid.","bad"); }
-  }
+  if (e.target.id==="apply") return applyCode(document.getElementById("code").value.trim());
   if (e.target.id==="checkout") return renderCheckout();
   if (e.target.id==="back") return renderCart();
   if (e.target.id==="pay") return placeOrder();
   if (e.target.id==="aff-back") return renderAffiliates();
   if (e.target.id==="job-back") return renderCareers();
   if (e.target.id==="aff-join") return joinAffiliate();
-  if (e.target.id==="aff-check") return checkAffiliate();
   if (e.target.id==="job-submit") return submitJob();
 });
 show("Mice");
+</script>
+<script type="module">
+// Shop database (Firebase). These keys are meant to be public: the database rules decide who can read or write.
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, doc, getDoc, addDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyD8QK6dMvZ-A8Zq9eL-OcwuAnF2PmCzE8Q",
+  authDomain: "flickshot-c0baf.firebaseapp.com",
+  projectId: "flickshot-c0baf",
+  storageBucket: "flickshot-c0baf.firebasestorage.app",
+  messagingSenderId: "577617551561",
+  appId: "1:577617551561:web:647a0cc39e7132851cad18"
+};
+const db = getFirestore(initializeApp(firebaseConfig));
+window.FB = {
+  addOrder: o => addDoc(collection(db, "orders"), { ...o, status: "new", createdAt: serverTimestamp() }),
+  addApplication: a => addDoc(collection(db, "applications"), { ...a, status: "new", createdAt: serverTimestamp() }),
+  codeExists: async code => (await getDoc(doc(db, "codes", code))).exists(),
+  joinAffiliate: async (email, code) => {
+    const b = writeBatch(db);
+    b.set(doc(db, "affiliates", email), { email, code, createdAt: serverTimestamp() });
+    b.set(doc(db, "codes", code), { code, createdAt: serverTimestamp() });
+    await b.commit();
+  }
+};
 </script>
 </body>
 </html>
